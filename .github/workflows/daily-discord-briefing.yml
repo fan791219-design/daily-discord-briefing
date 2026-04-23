@@ -2,8 +2,12 @@ name: Daily Discord Briefing
 
 on:
   schedule:
-    # 09:00 Asia/Taipei = 01:00 UTC.
-    - cron: "0 1 * * *"
+    # 09:17 Asia/Taipei = 01:17 UTC. Avoid minute 0 because GitHub Actions
+    # scheduled workflows can be delayed or dropped during top-of-hour load.
+    - cron: "17 1 * * *"
+    # TEMP DEBUG: prove that schedule events are firing without sending Discord.
+    # Remove this line after a schedule run appears in Actions.
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -14,6 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Show trigger context
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "schedule=${{ github.event.schedule }}"
+          echo "ref=${{ github.ref }}"
+
       - name: Check out repository
         uses: actions/checkout@v4
 
@@ -22,7 +32,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Skip Discord send for temporary schedule probe
+        if: github.event.schedule == '*/5 * * * *'
+        run: echo "Temporary schedule probe succeeded; Discord send intentionally skipped."
+
       - name: Send daily briefing to Discord
+        if: github.event.schedule != '*/5 * * * *'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python scripts/daily_briefing.py
