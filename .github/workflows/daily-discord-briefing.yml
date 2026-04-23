@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   send-briefing:
@@ -23,15 +24,47 @@ jobs:
           echo "dispatch_type=${{ github.event.action }}"
           echo "ref=${{ github.ref }}"
 
+      - name: Determine Taiwan send date
+        id: send-date
+        run: echo "date=$(TZ=Asia/Taipei date +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether today's briefing was already sent
+        id: sent-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .briefing-sent
+          key: daily-discord-briefing-${{ steps.send-date.outputs.date }}
+
+      - name: Skip duplicate briefing
+        if: steps.sent-cache.outputs.cache-hit == 'true'
+        run: echo "Briefing was already sent for ${{ steps.send-date.outputs.date }}. Skipping duplicate trigger."
+
       - name: Check out repository
+        if: steps.sent-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
 
       - name: Set up Python
+        if: steps.sent-cache.outputs.cache-hit != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Send daily briefing to Discord
+        if: steps.sent-cache.outputs.cache-hit != 'true'
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python scripts/daily_briefing.py
+
+      - name: Mark today's briefing as sent
+        if: steps.sent-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .briefing-sent
+          echo "sent_at=$(date -u +%FT%TZ)" > .briefing-sent/${{ steps.send-date.outputs.date }}.txt
+          echo "trigger=${{ github.event_name }}" >> .briefing-sent/${{ steps.send-date.outputs.date }}.txt
+
+      - name: Save sent marker
+        if: steps.sent-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .briefing-sent
+          key: daily-discord-briefing-${{ steps.send-date.outputs.date }}
