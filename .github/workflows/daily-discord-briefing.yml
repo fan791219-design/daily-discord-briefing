@@ -22,6 +22,8 @@ jobs:
           echo "event_name=${{ github.event_name }}"
           echo "schedule=${{ github.event.schedule }}"
           echo "dispatch_type=${{ github.event.action }}"
+          echo "payload_source=${{ github.event.client_payload.source }}"
+          echo "payload_schedule=${{ github.event.client_payload.schedule }}"
           echo "ref=${{ github.ref }}"
 
       - name: Determine Taiwan send date
@@ -49,6 +51,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Python dependencies
+        if: steps.sent-cache.outputs.cache-hit != 'true'
+        run: python -m pip install -r requirements.txt
+
       - name: Send daily briefing to Discord
         if: steps.sent-cache.outputs.cache-hit != 'true'
         env:
@@ -61,6 +67,7 @@ jobs:
           mkdir -p .briefing-sent
           echo "sent_at=$(date -u +%FT%TZ)" > .briefing-sent/${{ steps.send-date.outputs.date }}.txt
           echo "trigger=${{ github.event_name }}" >> .briefing-sent/${{ steps.send-date.outputs.date }}.txt
+          echo "source=${{ github.event.client_payload.source }}" >> .briefing-sent/${{ steps.send-date.outputs.date }}.txt
 
       - name: Save sent marker
         if: steps.sent-cache.outputs.cache-hit != 'true'

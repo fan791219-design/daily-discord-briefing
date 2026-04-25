@@ -1,11 +1,19 @@
 # Daily Discord Briefing
 
-每天台北時間早上 9 點，透過 GitHub Actions 發送：
+每天台北時間早上 9 點，透過 Google Cloud Scheduler 觸發 GitHub Actions，發送：
 
 - 新竹縣竹北市當日天氣摘要
 - 今日國際頭條 3 則中文摘要與連結
 - 今日科技頭條 3 則中文摘要與連結
 - Discord 通知
+
+## 排程策略
+
+主力排程是 Google Cloud Scheduler，在每天 `09:00 Asia/Taipei` 呼叫 GitHub `repository_dispatch`。
+
+GitHub Actions 原生 `schedule` 保留為備援，在每天 `09:17 Asia/Taipei` 觸發。workflow 會用台灣日期建立每日 sent marker，同一天如果被 Google Cloud Scheduler、GitHub schedule、或手動測試重複觸發，後續 run 會自動跳過 Discord 發送。
+
+Gemini API key 不用在排程觸發流程；這裡需要的是 Google Cloud Scheduler 與可呼叫 GitHub `repository_dispatch` 的 GitHub fine-grained token。
 
 ## 設定 Discord Webhook
 
@@ -17,11 +25,37 @@
    - Name: `DISCORD_WEBHOOK_URL`
    - Secret: 你的 Discord Webhook URL
 
-## 部署方式
+## 設定 Google Cloud Scheduler
 
-把這個資料夾推到 GitHub repo 後，workflow 會在每天 09:00 Asia/Taipei 自動執行。
+完整設定步驟請看 [docs/google-cloud-scheduler.md](docs/google-cloud-scheduler.md)。
 
-也可以手動測試：
+最短流程：
+
+1. 建立 GitHub fine-grained personal access token。
+2. token repository access 只選 `fan791219-design/daily-discord-briefing`。
+3. token repository permission 設定 `Contents: Read and write`。
+4. 在本機設定環境變數 `DAILY_DISCORD_GITHUB_TOKEN`。
+5. 執行 helper script 建立 Cloud Scheduler job：
+
+```powershell
+.\scripts\create-google-cloud-scheduler-job.ps1 -ProjectId "YOUR_GCP_PROJECT_ID" -Location "asia-east1"
+```
+
+## 手動測試
+
+本機測試 `repository_dispatch`：
+
+```powershell
+.\scripts\trigger-daily-discord-briefing.ps1 -Source local-test
+```
+
+手動執行 Google Cloud Scheduler job：
+
+```powershell
+gcloud scheduler jobs run daily-discord-briefing-dispatch --location asia-east1
+```
+
+也可以從 GitHub Actions 頁面手動測試：
 
 1. 到 GitHub repo 的 `Actions`。
 2. 選擇 `Daily Discord Briefing`。
@@ -34,9 +68,10 @@
 - 科技新聞：New York Times Technology RSS、CNN Tech via Google News RSS
 - 中文摘要：Google Translate public endpoint；若翻譯服務暫時不可用，會保留原文摘要
 
-## 本機測試
+## 本機 dry run
 
 ```powershell
+python -m pip install -r requirements.txt
 python scripts/daily_briefing.py --dry-run
 ```
 
